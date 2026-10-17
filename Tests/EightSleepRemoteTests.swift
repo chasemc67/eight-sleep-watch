@@ -82,10 +82,10 @@ final class DecodingTests: XCTestCase {
         let json = #"{"currentLevel":30,"currentDeviceLevel":-12.4,"currentState":{"type":"smart"},"smart":{"bedTimeLevel":10}}"#
         let t = try JSONDecoder().decode(TemperatureStatus.self, from: Data(json.utf8))
         XCTAssertEqual(t, TemperatureStatus(currentLevel: 30, currentDeviceLevel: -12, stateType: "smart"))
-        XCTAssertTrue(t.isOn)
+        XCTAssertEqual(t.isOn, true)
 
         let off = try JSONDecoder().decode(TemperatureStatus.self, from: Data(#"{"currentLevel":-20,"currentState":{"type":"off"}}"#.utf8))
-        XCTAssertFalse(off.isOn)
+        XCTAssertEqual(off.isOn, false)
         XCTAssertNil(off.currentDeviceLevel)
     }
 
@@ -108,10 +108,13 @@ final class DecodingTests: XCTestCase {
                                 userId: "u", email: "e@x.com", password: "secret")
         let ctx = WatchContext(credentials: creds, selection: SideSelection(sideUserId: "u", side: .left, label: "Chase · Left"))
         let dict = ctx.dictionary()
+        XCTAssertNil(dict["password"])
+        XCTAssertNil(dict["email"])
         XCTAssertFalse(dict.values.contains { ($0 as? String) == "secret" })
         let back = WatchContext(dictionary: dict)
         XCTAssertEqual(back, ctx)
         XCTAssertNil(back?.credentials?.password)
+        XCTAssertNil(back?.credentials?.email)
     }
 }
 

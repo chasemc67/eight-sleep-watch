@@ -8,6 +8,14 @@ struct Credentials: Codable, Equatable {
     var userId: String?
     var email: String?
     var password: String?
+    var issuedAt: Date? = nil
+
+    /// Expiry first; issued time breaks ties without accepting an older phone replay.
+    func shouldReplace(_ current: Credentials?) -> Bool {
+        guard let current else { return true }
+        if expiresAt != current.expiresAt { return expiresAt > current.expiresAt }
+        return (issuedAt ?? .distantPast) > (current.issuedAt ?? .distantPast)
+    }
 
     /// True when the token expires within `margin` seconds (default: refresh ~2 min early).
     func needsRefresh(now: Date = Date(), margin: TimeInterval = 120) -> Bool {
@@ -41,13 +49,13 @@ struct TokenResponse: Decodable {
 
 /// `GET https://app-api.8slp.net/v1/users/{id}/temperature`
 struct TemperatureStatus: Decodable, Equatable {
-    var currentLevel: Int
+    var currentLevel: Int?
     var currentDeviceLevel: Int?
-    var stateType: String
+    var stateType: String?
 
-    var isOn: Bool { stateType.lowercased() != "off" }
+    var isOn: Bool? { stateType.map { $0.lowercased() != "off" } }
 
-    init(currentLevel: Int, currentDeviceLevel: Int?, stateType: String) {
+    init(currentLevel: Int?, currentDeviceLevel: Int?, stateType: String?) {
         self.currentLevel = currentLevel
         self.currentDeviceLevel = currentDeviceLevel
         self.stateType = stateType
@@ -58,9 +66,9 @@ struct TemperatureStatus: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        currentLevel = c.lossyInt(forKey: .currentLevel) ?? 0
+        currentLevel = c.lossyInt(forKey: .currentLevel)
         currentDeviceLevel = c.lossyInt(forKey: .currentDeviceLevel)
-        stateType = (try? c.decode(State.self, forKey: .currentState))?.type ?? "off"
+        stateType = (try? c.decode(State.self, forKey: .currentState))?.type
     }
 }
 
@@ -75,6 +83,8 @@ struct UserProfile: Decodable, Equatable {
     let lastName: String?
     let devices: [String]?
     let currentDevice: CurrentDevice?
+
+    var preferredDeviceId: String? { currentDevice?.id ?? devices?.first }
 }
 
 struct UserEnvelope: Decodable { let user: UserProfile }

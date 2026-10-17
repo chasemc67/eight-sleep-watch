@@ -38,7 +38,6 @@ final class WatchSession: NSObject, WCSessionDelegate {
             })
         }
         guard let reply, let context = WatchContext(dictionary: reply), context.signedIn else { return nil }
-        if let selection = context.selection { SharedSettings.sideSelection = selection }
         return context
     }
 }

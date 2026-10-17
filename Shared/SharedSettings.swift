@@ -43,10 +43,10 @@ enum SharedSettings {
         AppGroup.defaults.object(forKey: Key.lastIsOn) as? Bool
     }
 
-    static func recordLevel(_ raw: Int, isOn: Bool) {
+    static func recordLevel(_ raw: Int?, isOn: Bool?) {
         let d = AppGroup.defaults
-        d.set(raw, forKey: Key.lastLevel)
-        d.set(isOn, forKey: Key.lastIsOn)
+        if let raw { d.set(raw, forKey: Key.lastLevel) } else { d.removeObject(forKey: Key.lastLevel) }
+        if let isOn { d.set(isOn, forKey: Key.lastIsOn) } else { d.removeObject(forKey: Key.lastIsOn) }
         d.set(Date(), forKey: Key.lastUpdated)
     }
 

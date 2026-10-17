@@ -6,6 +6,7 @@ struct WatchContext: Equatable {
     var accessToken: String?
     var refreshToken: String?
     var expiresAt: Date?
+    var issuedAt: Date?
     var userId: String?
     var sideUserId: String?
     var sideLabel: String?
@@ -14,11 +15,12 @@ struct WatchContext: Equatable {
     static let signedOut = WatchContext(signedIn: false)
 
     init(signedIn: Bool, accessToken: String? = nil, refreshToken: String? = nil, expiresAt: Date? = nil,
-         userId: String? = nil, sideUserId: String? = nil, sideLabel: String? = nil, side: BedSide? = nil) {
+         issuedAt: Date? = nil, userId: String? = nil, sideUserId: String? = nil, sideLabel: String? = nil, side: BedSide? = nil) {
         self.signedIn = signedIn
         self.accessToken = accessToken
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
+        self.issuedAt = issuedAt
         self.userId = userId
         self.sideUserId = sideUserId
         self.sideLabel = sideLabel
@@ -28,7 +30,7 @@ struct WatchContext: Equatable {
     init(credentials: Credentials?, selection: SideSelection?) {
         guard let credentials else { self.init(signedIn: false); return }
         self.init(signedIn: true, accessToken: credentials.accessToken, refreshToken: credentials.refreshToken,
-                  expiresAt: credentials.expiresAt, userId: credentials.userId,
+                  expiresAt: credentials.expiresAt, issuedAt: credentials.issuedAt, userId: credentials.userId,
                   sideUserId: selection?.sideUserId, sideLabel: selection?.label, side: selection?.side)
     }
 
@@ -38,6 +40,7 @@ struct WatchContext: Equatable {
                   accessToken: d["accessToken"] as? String,
                   refreshToken: d["refreshToken"] as? String,
                   expiresAt: (d["expiresAt"] as? Double).map { Date(timeIntervalSince1970: $0) },
+                  issuedAt: (d["issuedAt"] as? Double).map { Date(timeIntervalSince1970: $0) },
                   userId: d["userId"] as? String,
                   sideUserId: d["sideUserId"] as? String,
                   sideLabel: d["sideLabel"] as? String,
@@ -50,6 +53,7 @@ struct WatchContext: Equatable {
         d["accessToken"] = accessToken
         d["refreshToken"] = refreshToken
         d["expiresAt"] = expiresAt?.timeIntervalSince1970
+        d["issuedAt"] = issuedAt?.timeIntervalSince1970
         d["userId"] = userId
         d["sideUserId"] = sideUserId
         d["sideLabel"] = sideLabel
@@ -61,7 +65,13 @@ struct WatchContext: Equatable {
     var credentials: Credentials? {
         guard signedIn, let accessToken else { return nil }
         return Credentials(accessToken: accessToken, refreshToken: refreshToken,
-                           expiresAt: expiresAt ?? .distantPast, userId: userId)
+                           expiresAt: expiresAt ?? .distantPast, userId: userId, issuedAt: issuedAt)
+    }
+
+    /// Token-only updates and same-side replays preserve the user's optimistic taps.
+    func shouldResetControls(currentSideUserId: String?) -> Bool {
+        guard let sideUserId else { return false }
+        return sideUserId != currentSideUserId
     }
 
     var selection: SideSelection? {

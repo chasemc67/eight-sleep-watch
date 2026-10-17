@@ -30,7 +30,10 @@ struct BedTempWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: BedEntry
 
-    private var levelText: String? { entry.level.map(TemperatureFormat.levelText(raw:)) }
+    private var levelText: String? {
+        if entry.isOn == false { return "Off" }
+        return entry.level.map(TemperatureFormat.levelText(raw:))
+    }
 
     var body: some View {
         switch family {
@@ -40,8 +43,9 @@ struct BedTempWidgetView: View {
                 VStack(spacing: 0) {
                     Image(systemName: "bed.double.fill")
                         .font(.system(size: 18, weight: .semibold))
-                    Image(systemName: "thermometer.medium")
+                    Text(levelText ?? "–")
                         .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.levelColor(entry.level))
                 }
                 .widgetAccentable()
             }
@@ -82,6 +86,7 @@ struct BedTempWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BedTemp", provider: BedProvider()) { entry in
             BedTempWidgetView(entry: entry)
+                .widgetURL(URL(string: "eightsleepremote://temperature"))
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Bed Temp")

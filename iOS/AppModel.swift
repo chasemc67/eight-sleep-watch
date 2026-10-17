@@ -24,6 +24,11 @@ final class AppModel: ObservableObject {
     let isDemo = DemoMode.isEnabled
     private let client: EightSleepClient
     private let debouncer = Debouncer(delay: 0.6)
+    private let loadGate = LoadGate()
+    private var revision = 0
+    private lazy var updates = LevelUpdateCoordinator(
+        power: { [client] in try await client.setPower(userId: $0, on: true) },
+        level: { [client] in try await client.setLevel(userId: $0, level: $1, turnOnFirst: false) })
 
     var displayLevel: Int? { pendingLevel ?? status?.currentLevel }
     var selectedOption: SideOption? { sides.first { $0.id == selectedSide } }
@@ -38,7 +43,7 @@ final class AppModel: ObservableObject {
                 SideOption(assignment: SideAssignment(side: .right, userId: "demo-right"), firstName: "Partner"),
             ]
             selectedSide = .left
-            status = TemperatureStatus(currentLevel: 30, currentDeviceLevel: 22, stateType: "smart")
+            status = TemperatureStatus(currentLevel: 20, currentDeviceLevel: 20, stateType: "smart")
         } else {
             let creds = store.load()
             client = EightSleepClient(credentials: creds, store: store)
@@ -77,7 +82,10 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() async {
+        revision += 1
+        updates.invalidate()
         debouncer.cancel()
+        isSending = false
         await client.signOut()
         SharedSettings.clear()
         isSignedIn = false
@@ -92,13 +100,15 @@ final class AppModel: ObservableObject {
     // MARK: Loading
 
     /// Loads the account's Pod, its sides and names, then the selected side's temperature.
-    func loadAll() async {
-        guard !isDemo else { return }
+    func loadAll(force: Bool = false) async {
+        guard !isDemo, isSignedIn, loadGate.begin(force: force) else { return }
+        let version = revision
+        defer { loadGate.end() }
         isBusy = true
         defer { isBusy = false }
         do {
             let me = try await client.me()
-            guard let deviceId = me.devices?.first ?? me.currentDevice?.id else { throw EightSleepError.noDevice }
+            guard let deviceId = me.preferredDeviceId else { throw EightSleepError.noDevice }
             let assignments = try await client.sides(deviceId: deviceId)
             var options: [SideOption] = []
             for a in assignments {
@@ -106,10 +116,11 @@ final class AppModel: ObservableObject {
                 if a.userId == me.userId {
                     name = me.firstName
                 } else {
-                    name = try? await client.user(id: a.userId).firstName // may 403 for other members
+                    name = try await client.user(id: a.userId)?.firstName // 403 means a private profile
                 }
                 options.append(SideOption(assignment: a, firstName: name))
             }
+            guard version == revision, isSignedIn else { return }
             sides = options
 
             let saved = SharedSettings.sideSelection
@@ -124,6 +135,7 @@ final class AppModel: ObservableObject {
             persistSelection()
             await refreshTemperature()
         } catch {
+            guard version == revision else { return }
             errorMessage = message(for: error)
         }
     }
@@ -131,29 +143,39 @@ final class AppModel: ObservableObject {
     func refreshTemperature() async {
         guard let option = selectedOption else { return }
         if isDemo { return }
+        guard !debouncer.isPending, !updates.isSending else { return }
+        let version = revision
         do {
             let s = try await client.temperature(userId: option.assignment.userId)
+            guard version == revision, !debouncer.isPending, !updates.isSending else { return }
             status = s
-            if !debouncer.isPending { pendingLevel = nil }
+            pendingLevel = nil
             SharedSettings.recordLevel(s.currentLevel, isOn: s.isOn)
             errorMessage = nil
         } catch {
+            guard version == revision else { return }
             errorMessage = message(for: error)
         }
     }
 
     func select(_ side: BedSide) {
         guard side != selectedSide else { return }
+        revision += 1
+        updates.invalidate()
+        isSending = false
         debouncer.cancel()
         pendingLevel = nil
         selectedSide = side
         persistSelection()
         if isDemo {
-            status = TemperatureStatus(currentLevel: side == .left ? 30 : -20, currentDeviceLevel: side == .left ? 22 : -12, stateType: "smart")
+            status = TemperatureStatus(currentLevel: side == .left ? 20 : -20, currentDeviceLevel: side == .left ? 22 : -12, stateType: "smart")
             return
         }
         status = nil
-        Task { await refreshTemperature() }
+        Task {
+            await updates.waitUntilIdle()
+            await refreshTemperature()
+        }
     }
 
     private func persistSelection() {
@@ -165,43 +187,51 @@ final class AppModel: ObservableObject {
     // MARK: Control
 
     func step(_ delta: Int) {
-        guard let base = displayLevel else { return }
+        guard !isSending || updates.isSending, let base = displayLevel else { return }
+        updates.discardQueued()
         pendingLevel = TemperatureFormat.stepped(raw: base, by: delta)
         debouncer.call { [weak self] in await self?.commitLevel() }
     }
 
     private func commitLevel() async {
         guard let target = pendingLevel, let option = selectedOption else { return }
-        let wasOn = status?.isOn ?? false
         if isDemo {
             status = TemperatureStatus(currentLevel: target, currentDeviceLevel: status?.currentDeviceLevel, stateType: "smart")
             pendingLevel = nil
             return
         }
         isSending = true
-        defer { isSending = false }
-        do {
-            try await client.setLevel(userId: option.assignment.userId, level: target, turnOnFirst: !wasOn)
-            status = TemperatureStatus(currentLevel: target, currentDeviceLevel: status?.currentDeviceLevel,
-                                       stateType: wasOn ? (status?.stateType ?? "smart") : "smart")
-            if !debouncer.isPending { pendingLevel = nil }
-            SharedSettings.recordLevel(target, isOn: true)
-            errorMessage = nil
-        } catch {
-            errorMessage = message(for: error)
-            pendingLevel = nil
-            await refreshTemperature()
+        updates.submit(userId: option.assignment.userId, level: target, isOn: status?.isOn) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .sent(let level, let isOn):
+                self.status = TemperatureStatus(currentLevel: level, currentDeviceLevel: self.status?.currentDeviceLevel,
+                                                stateType: isOn.map { $0 ? "smart" : "off" })
+                if self.pendingLevel == level { self.pendingLevel = nil }
+                SharedSettings.recordLevel(level, isOn: isOn)
+                self.errorMessage = nil
+            case .failed(let error, let isOn):
+                self.status?.stateType = isOn.map { $0 ? "smart" : "off" }
+                self.errorMessage = self.message(for: error)
+                if !self.debouncer.isPending, !self.updates.hasQueuedRequest { self.pendingLevel = nil }
+            }
+            self.isSending = self.pendingLevel != nil && !self.debouncer.isPending
         }
     }
 
     func setPower(_ on: Bool) async {
-        guard let option = selectedOption else { return }
+        guard let option = selectedOption, !updates.isSending, !debouncer.isPending, !isSending else { return }
         if isDemo {
             status?.stateType = on ? "smart" : "off"
             return
         }
+        updates.invalidate()
+        isSending = true
+        let version = revision
+        defer { isSending = false }
         do {
             try await client.setPower(userId: option.assignment.userId, on: on)
+            guard version == revision else { return }
             status?.stateType = on ? "smart" : "off"
             await refreshTemperature()
         } catch {

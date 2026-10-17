@@ -11,7 +11,7 @@ final class WatchModel: ObservableObject {
     @Published private(set) var sideLabel: String
     @Published private(set) var serverLevel: Int?
     @Published private(set) var displayLevel: Int?
-    @Published private(set) var isOn = false
+    @Published private(set) var isOn: Bool?
     @Published private(set) var sendState: SendState = .idle
     @Published private(set) var errorMessage: String?
     /// Bound to the Digital Crown, in app steps (-10…10).
@@ -21,6 +21,11 @@ final class WatchModel: ObservableObject {
     private let client: EightSleepClient
     private let debouncer = Debouncer(delay: 0.6)
     private var sideUserId: String?
+    private var revision = 0
+    private let loadGate = LoadGate()
+    private lazy var updates = LevelUpdateCoordinator(
+        power: { [client] in try await client.setPower(userId: $0, on: true) },
+        level: { [client] in try await client.setLevel(userId: $0, level: $1, turnOnFirst: false) })
 
     init() {
         if isDemo {
@@ -29,9 +34,9 @@ final class WatchModel: ObservableObject {
             sideLabel = "Chase · Left"
             sideUserId = "demo-left"
             isOn = true
-            setDisplay(30)
-            serverLevel = 30
-            SharedSettings.recordLevel(30, isOn: true)
+            setDisplay(20)
+            serverLevel = 20
+            SharedSettings.recordLevel(20, isOn: true)
             return
         }
         let store = TokenStore()
@@ -44,7 +49,7 @@ final class WatchModel: ObservableObject {
         if let last = SharedSettings.lastLevel {
             serverLevel = last
             setDisplay(last)
-            isOn = SharedSettings.lastIsOn ?? false
+            isOn = SharedSettings.lastIsOn
         }
 
         WatchSession.shared.model = self
@@ -61,7 +66,10 @@ final class WatchModel: ObservableObject {
     func apply(_ context: WatchContext) async {
         guard !isDemo else { return }
         guard context.signedIn, let creds = context.credentials else {
+            revision += 1
+            updates.invalidate()
             debouncer.cancel()
+            sendState = .idle
             await client.signOut()
             SharedSettings.clear()
             isConfigured = false
@@ -73,36 +81,54 @@ final class WatchModel: ObservableObject {
         }
         // Application context can be stale; don't replace a newer token we refreshed ourselves.
         let current = await client.credentials
-        if current == nil || creds.expiresAt >= current!.expiresAt || current!.accessToken == creds.accessToken {
+        if creds.shouldReplace(current) {
             await client.setCredentials(creds)
         }
-        let oldSide = sideUserId
+        let resetControls = context.shouldResetControls(currentSideUserId: sideUserId)
         if let selection = context.selection {
             SharedSettings.sideSelection = selection
             sideLabel = selection.label
             sideUserId = selection.sideUserId
         }
         isConfigured = sideUserId != nil
-        if sideUserId != oldSide || serverLevel == nil {
+        if resetControls {
+            revision += 1
+            updates.invalidate()
+            debouncer.cancel()
+            serverLevel = nil
+            displayLevel = nil
+            isOn = nil
+            sendState = .idle
+            SharedSettings.recordLevel(nil, isOn: nil)
+            WidgetCenter.shared.reloadAllTimelines()
+            await updates.waitUntilIdle()
+            await refresh(force: true)
+        } else if serverLevel == nil {
             await refresh()
         }
     }
 
     // MARK: Server
 
-    func refresh() async {
+    func refresh(force: Bool = false) async {
         guard isConfigured, !isDemo, let sideUserId else { return }
         // Don't clobber taps that haven't been sent yet.
-        guard !debouncer.isPending, sendState != .sending else { return }
+        guard !debouncer.isPending, !updates.isSending, loadGate.begin(force: force) else { return }
+        let version = revision
+        defer {
+            loadGate.end()
+            if version != revision, isConfigured { Task { await refresh(force: true) } }
+        }
         do {
             let status = try await client.temperature(userId: sideUserId)
-            guard !debouncer.isPending, sendState != .sending else { return }
+            guard version == revision, !debouncer.isPending, !updates.isSending else { return }
             serverLevel = status.currentLevel
             isOn = status.isOn
-            setDisplay(status.currentLevel)
+            if let level = status.currentLevel { setDisplay(level) } else { displayLevel = nil }
             errorMessage = nil
             SharedSettings.recordLevel(status.currentLevel, isOn: status.isOn)
         } catch {
+            guard version == revision else { return }
             errorMessage = message(for: error)
         }
     }
@@ -134,7 +160,8 @@ final class WatchModel: ObservableObject {
     }
 
     private func schedule() {
-        sendState = .idle
+        updates.discardQueued()
+        if !updates.isSending { sendState = .idle }
         errorMessage = nil
         debouncer.call { [weak self] in await self?.commit() }
     }
@@ -149,24 +176,34 @@ final class WatchModel: ObservableObject {
             return
         }
         sendState = .sending
-        do {
-            try await client.setLevel(userId: sideUserId, level: target, turnOnFirst: !isOn)
-            serverLevel = target
-            isOn = true
-            SharedSettings.recordLevel(target, isOn: true)
-            WidgetCenter.shared.reloadAllTimelines()
-            await flashSent()
-        } catch {
-            sendState = .failed
-            errorMessage = message(for: error)
-            if let serverLevel, !debouncer.isPending { setDisplay(serverLevel) }
+        updates.submit(userId: sideUserId, level: target, isOn: isOn) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .sent(let level, let isOn):
+                self.serverLevel = level
+                self.isOn = isOn
+                SharedSettings.recordLevel(level, isOn: isOn)
+                WidgetCenter.shared.reloadAllTimelines()
+                if self.displayLevel == level {
+                    Task {
+                        guard self.displayLevel == level, !self.debouncer.isPending else { return }
+                        await self.flashSent()
+                    }
+                }
+            case .failed(let error, let isOn):
+                self.isOn = isOn
+                self.sendState = self.updates.hasQueuedRequest ? .sending : .failed
+                self.errorMessage = self.message(for: error)
+                if !self.debouncer.isPending, !self.updates.hasQueuedRequest, let level = self.serverLevel { self.setDisplay(level) }
+            }
         }
     }
 
     private func flashSent() async {
+        let version = revision
         sendState = .sent
         try? await Task.sleep(nanoseconds: 1_500_000_000)
-        if sendState == .sent { sendState = .idle }
+        if version == revision, sendState == .sent { sendState = .idle }
     }
 
     private func message(for error: Error) -> String {

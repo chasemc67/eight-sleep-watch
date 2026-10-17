@@ -31,7 +31,7 @@ struct TokenStore {
         guard let data = try? JSONEncoder().encode(credentials) else { return false }
         let attrs: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         let status = SecItemUpdate(baseQuery as CFDictionary, attrs as CFDictionary)
         if status == errSecItemNotFound {

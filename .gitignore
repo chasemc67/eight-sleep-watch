@@ -3,3 +3,9 @@ build/
 DerivedData/
 xcuserdata/
 .DS_Store
+*.xcarchive/
+*.ipa
+*.xcresult/
+.swiftpm/
+.env
+.env.*
