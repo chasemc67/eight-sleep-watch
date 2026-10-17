@@ -36,14 +36,16 @@ The App Group `group.com.AnomalousResearch.EightSleepWatch` stores side selectio
 
 | Role | Hex | Derivation |
 |---|---|---|
-| Warming / + | `#C6738C` | Median interior RGB of the official app’s rose-red `+1` temperature glyph |
+| Warming / + | `#BD425B` | Median RGB of the big `+2` temperature text in Chase’s screenshot of the real Eight Sleep iOS app (October 2026) |
 | Cooling / − | `#3858D0` | Median interior RGB of the official app’s blue `−4` temperature glyph |
 | Neutral | `#FFFFFF` | Zero / unknown level |
 | Navy background / card | `#0D1217` / `#1F262E` | Grok reference UI, rounded to 8-bit RGB |
 
-Source: [Eight Sleep’s App Store listing](https://apps.apple.com/us/app/eight-sleep/id1086913845), fetched through [Apple’s lookup API](https://itunes.apple.com/lookup?id=1086913845&country=us) on 2026-10-16, and its [1290×2796 temperature screenshot](https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/ed/9b/7e/ed9b7e1c-d54b-040d-a0d0-13bae05ced05/2_APP_IPHONE_67_2.jpg/1290x2796bb.jpg). With Pillow, crop warm `(910,1390)-(960,1450)` and retain `R>175, R>1.3G, R>1.05B` (221 pixels); crop cool `(620,1390)-(665,1450)` and retain `B>190, B>1.4R, B>1.1G` (196 pixels). Per-channel medians yield `(198,115,140)` and `(56,88,208)`. These are reproducible JPEG samples, not asserted official brand tokens. Downloaded images stay outside the repository.
+Warming source: Chase supplied `#BD425B` (RGB `189,66,91`), the median color of the big `+2` temperature text in a screenshot he took of the real Eight Sleep iOS app in October 2026. This supersedes the earlier, lighter `#C6738C` App Store JPEG thin-glyph sample. Chase supplied this value and sampling provenance. Chase’s app icon is a separate illustration and is unchanged.
 
-Cross-check: [Eight Sleep’s website](https://www.eightsleep.com/) CSS contains `#4158EE`, consistent with the third-party “pulse blue” lead, but that website accent does not identify the app’s warm/cool temperature colors. The app screenshot is the primary source used here.
+Cooling source (unchanged): [Eight Sleep’s App Store listing](https://apps.apple.com/us/app/eight-sleep/id1086913845), fetched through [Apple’s lookup API](https://itunes.apple.com/lookup?id=1086913845&country=us) on 2026-10-16, and its [1290×2796 temperature screenshot](https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/ed/9b/7e/ed9b7e1c-d54b-040d-a0d0-13bae05ced05/2_APP_IPHONE_67_2.jpg/1290x2796bb.jpg). With Pillow, crop the blue `−4` glyph at `(620,1390)-(665,1450)` and retain `B>190, B>1.4R, B>1.1G` (196 pixels). Per-channel medians yield `(56,88,208)` / `#3858D0`. These are screenshot samples, not asserted official brand tokens. Downloaded images stay outside the repository.
+
+Cross-check: [Eight Sleep’s website](https://www.eightsleep.com/) CSS contains `#4158EE`, consistent with the third-party “pulse blue” lead, but that website accent does not identify the app’s warm/cool temperature colors. The app screenshots are the primary sources used here.
 
 ## Build and test
 
@@ -99,4 +101,4 @@ Launch either app with `-demo` or `ESR_DEMO=1`. No networking: signed in, Left =
 
 ## Provenance
 
-This unified revision was written in this repository from the Claude/Opus base (`opus-original`, bd97e0b). It retains Shared, the client actor and single refresh, separate phone/watch models, typed password-free context, host-less tests, crown/debounce/haptic/rollback behavior and four complication families. Grok supplied the visual direction (navy, eyebrow/title/tagline login, pill sign-in, side cards, large number), the serialized-send idea and build hygiene (privacy manifests, separate entitlements, export options). Codex supplied robustness ideas: credential-generation guard, Retry-After backoff and partner-profile 403 tolerance. Neither reference repository was modified or built. The shared color values were derived independently from Eight Sleep’s own screenshot.
+This unified revision was written in this repository from the Claude/Opus base (`opus-original`, bd97e0b). It retains Shared, the client actor and single refresh, separate phone/watch models, typed password-free context, host-less tests, crown/debounce/haptic/rollback behavior and four complication families. Grok supplied the visual direction (navy, eyebrow/title/tagline login, pill sign-in, side cards, large number), the serialized-send idea and build hygiene (privacy manifests, separate entitlements, export options). Codex supplied robustness ideas: credential-generation guard, Retry-After backoff and partner-profile 403 tolerance. Neither reference repository was modified or built. The shared cooling color was sampled independently from Eight Sleep’s App Store screenshot; Chase supplied the updated warming red from his screenshot of the real app.

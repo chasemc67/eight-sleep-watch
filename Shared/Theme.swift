@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Eight Sleep's own App Store temperature screenshot (retrieved 2026-10-16):
+/// Warming #BD425B (189,66,91): median of the big "+2" temperature text in
+/// Chase's screenshot of the real Eight Sleep iOS app, October 2026 (user-supplied value).
+/// This supersedes the lighter #C6738C App Store JPEG thin-glyph sample.
+/// Cooling #3858D0 is unchanged, sampled from Eight Sleep's App Store temperature image:
 /// https://apps.apple.com/us/app/eight-sleep/id1086913845
 /// https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/ed/9b/7e/ed9b7e1c-d54b-040d-a0d0-13bae05ced05/2_APP_IPHONE_67_2.jpg/1290x2796bb.jpg
-/// Pillow RGB medians of interior colored glyph pixels: +1 at (910,1390)-(960,1450),
-/// R>175,R>1.3G,R>1.05B => (198,115,140); -4 at (620,1390)-(665,1450),
-/// B>190,B>1.4R,B>1.1G => (56,88,208). JPEG samples, not claimed brand tokens.
-/// Cross-check: https://www.eightsleep.com CSS uses #4158ee as its website accent;
-/// the temperature glyphs above are the source for the app-specific warm/cool pair.
+/// Pillow crop -4 at (620,1390)-(665,1450), B>190,B>1.4R,B>1.1G:
+/// median RGB (56,88,208). Screenshot samples, not asserted official brand tokens.
+/// Cross-check: https://www.eightsleep.com CSS uses #4158ee as its website accent.
 /// Navy/card colors reproduce Grok's reference UI, rounded to 8-bit RGB.
 enum Theme {
-    static let warm = color(0xC6738C)
+    static let warm = color(0xBD425B)
     static let cool = color(0x3858D0)
     static let background = color(0x0D1217)
     static let card = color(0x1F262E)
