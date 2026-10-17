@@ -1,0 +1,151 @@
+name: EightSleepRemote
+options:
+  bundleIdPrefix: com.AnomalousResearch
+  deploymentTarget:
+    iOS: "18.0"
+    watchOS: "11.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: XPU32D9V4J
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  EightSleepRemote:
+    type: application
+    platform: iOS
+    sources:
+      - path: iOS
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.EightSleepWatch
+        PRODUCT_NAME: EightSleepRemote
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: iOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iOS/EightSleepRemote.entitlements
+    info:
+      path: iOS/Info.plist
+      properties:
+        CFBundleDisplayName: Eight Sleep Remote
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    entitlements:
+      path: iOS/EightSleepRemote.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.AnomalousResearch.EightSleepWatch
+    dependencies:
+      - target: EightSleepRemoteWatch
+        embed: true
+
+  EightSleepRemoteWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Watch
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.EightSleepWatch.watchkitapp
+        PRODUCT_NAME: EightSleepRemoteWatch
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: Watch/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Watch/EightSleepRemoteWatch.entitlements
+    info:
+      path: Watch/Info.plist
+      properties:
+        CFBundleDisplayName: 8 Sleep
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.AnomalousResearch.EightSleepWatch
+    entitlements:
+      path: Watch/EightSleepRemoteWatch.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.AnomalousResearch.EightSleepWatch
+    dependencies:
+      - target: EightSleepRemoteWidget
+        embed: true
+
+  EightSleepRemoteWidget:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: Widget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.EightSleepWatch.watchkitapp.Widget
+        PRODUCT_NAME: EightSleepRemoteWidget
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+        INFOPLIST_FILE: Widget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widget/EightSleepRemoteWidget.entitlements
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Bed Temp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/EightSleepRemoteWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.AnomalousResearch.EightSleepWatch
+
+  EightSleepRemoteTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.AnomalousResearch.EightSleepWatch.tests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  EightSleepRemote:
+    build:
+      targets:
+        EightSleepRemote: all
+        EightSleepRemoteTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - EightSleepRemoteTests
+    archive:
+      config: Release
+  EightSleepRemoteWatch:
+    build:
+      targets:
+        EightSleepRemoteWatch: all
+    run:
+      config: Debug
+    archive:
+      config: Release
